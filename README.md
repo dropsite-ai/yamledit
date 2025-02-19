@@ -56,6 +56,12 @@ yamledit -op=read -file=config.yaml -path=person.name
 yamledit -op=update -file=config.yaml -path=person.age -value=35 -out=updated.yaml
 ```
 
+**Copy a value:**
+```bash
+value=$(yamledit get --file source.yaml --path source.path)
+yamledit set --file target.yaml --path target.path --value "$value"
+```
+
 ## Contributing
 Contributions welcome! Open an issue or submit a pull request.
 
