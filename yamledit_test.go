@@ -126,3 +126,44 @@ func TestUpdateWholeNode(t *testing.T) {
 		t.Errorf("Expected person %+v, got %+v", newPerson, p)
 	}
 }
+
+func TestReadNodeAndUpdateNode(t *testing.T) {
+	// Parse once, then use the node-based API.
+	doc, err := Parse([]byte(sampleYAML))
+	if err != nil {
+		t.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	// Read using ReadNode.
+	var name string
+	if err = ReadNode(doc, "person.name", &name); err != nil {
+		t.Fatalf("Failed to read person.name using ReadNode: %v", err)
+	}
+	if name != "John Doe" {
+		t.Errorf("Expected name 'John Doe', got %q", name)
+	}
+
+	// Update using UpdateNode.
+	if err = UpdateNode(doc, "person.age", 40); err != nil {
+		t.Fatalf("Failed to update person.age using UpdateNode: %v", err)
+	}
+	var age int
+	if err = ReadNode(doc, "person.age", &age); err != nil {
+		t.Fatalf("Failed to read updated person.age using ReadNode: %v", err)
+	}
+	if age != 40 {
+		t.Errorf("Expected age 40, got %d", age)
+	}
+
+	// Encode back to YAML and verify the update.
+	updatedYAML, err := Encode(doc)
+	if err != nil {
+		t.Fatalf("Failed to encode document: %v", err)
+	}
+	if err := Read(updatedYAML, "person.age", &age); err != nil {
+		t.Fatalf("Failed to read person.age from encoded YAML: %v", err)
+	}
+	if age != 40 {
+		t.Errorf("Expected age 40 in encoded YAML, got %d", age)
+	}
+}

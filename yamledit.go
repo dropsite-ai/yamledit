@@ -8,46 +8,76 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Read decodes the YAML value at the dot-notation path into out.
-// out can be any type (string, struct, map, etc.) that matches the YAML content.
-func Read(yamlBytes []byte, dotPath string, out interface{}) error {
-	var root yaml.Node
-	if err := yaml.Unmarshal(yamlBytes, &root); err != nil {
-		return err
+// Parse parses YAML bytes into a document node and returns a pointer to the document.
+func Parse(yamlBytes []byte) (*yaml.Node, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(yamlBytes, &doc); err != nil {
+		return nil, err
 	}
-	keys := strings.Split(dotPath, ".")
-	if len(root.Content) == 0 {
+	if len(doc.Content) == 0 {
+		return nil, fmt.Errorf("empty YAML document")
+	}
+	return &doc, nil
+}
+
+// Encode encodes the entire document node back into YAML bytes.
+func Encode(doc *yaml.Node) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ReadNode decodes the YAML value at the dot-notation path from the document node into out.
+// The document node should be obtained via Parse.
+func ReadNode(doc *yaml.Node, dotPath string, out interface{}) error {
+	if len(doc.Content) == 0 {
 		return fmt.Errorf("empty YAML document")
 	}
-	node, err := findNode(root.Content[0], keys)
+	keys := strings.Split(dotPath, ".")
+	// Use the document’s first content node (usually the mapping root).
+	mappingNode := doc.Content[0]
+	node, err := findNode(mappingNode, keys)
 	if err != nil {
 		return err
 	}
 	return node.Decode(out)
 }
 
-// Update replaces the YAML value at the dot-notation path with newValue (which can be any type)
-// and returns the updated YAML as bytes.
-func Update(yamlBytes []byte, dotPath string, newValue interface{}) ([]byte, error) {
-	var root yaml.Node
-	if err := yaml.Unmarshal(yamlBytes, &root); err != nil {
-		return nil, err
+// UpdateNode updates the YAML value at the dot-notation path in the document node with newValue.
+// It modifies the document in place.
+func UpdateNode(doc *yaml.Node, dotPath string, newValue interface{}) error {
+	if len(doc.Content) == 0 {
+		return fmt.Errorf("empty YAML document")
 	}
 	keys := strings.Split(dotPath, ".")
-	if len(root.Content) == 0 {
-		return nil, fmt.Errorf("empty YAML document")
-	}
-	if err := updateNode(root.Content[0], keys, newValue); err != nil {
-		return nil, err
-	}
+	mappingNode := doc.Content[0]
+	return updateNode(mappingNode, keys, newValue)
+}
 
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-	if err := enc.Encode(&root); err != nil {
+// Read is a wrapper that accepts YAML bytes, parses them, and reads the value at dotPath.
+func Read(yamlBytes []byte, dotPath string, out interface{}) error {
+	doc, err := Parse(yamlBytes)
+	if err != nil {
+		return err
+	}
+	return ReadNode(doc, dotPath, out)
+}
+
+// Update is a wrapper that accepts YAML bytes, parses them, updates the value at dotPath,
+// and returns the updated YAML as bytes.
+func Update(yamlBytes []byte, dotPath string, newValue interface{}) ([]byte, error) {
+	doc, err := Parse(yamlBytes)
+	if err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	if err := UpdateNode(doc, dotPath, newValue); err != nil {
+		return nil, err
+	}
+	return Encode(doc)
 }
 
 // findNode recursively traverses the node tree using dot-notation keys and returns the target node.
@@ -98,7 +128,7 @@ func createYAMLNode(newValue interface{}) (*yaml.Node, error) {
 	if err := yaml.Unmarshal(data, &node); err != nil {
 		return nil, err
 	}
-	// Unmarshal returns a document node; use its first content node.
+	// Unmarshal returns a document node; return its first content.
 	if len(node.Content) > 0 {
 		return node.Content[0], nil
 	}
